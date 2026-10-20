@@ -9,14 +9,6 @@
   <style>[hidden] { display: none !important; }</style>
 </head>
 <body class="worker-page">
-  <section id="captureApproval" class="login-shell" aria-labelledby="captureApprovalTitle" hidden>
-    <div class="card login-card">
-      <h1 id="captureApprovalTitle">Camera &amp; Microphone Setup</h1>
-      <p>Before opening your workspace, please approve camera and microphone access. The Admin may request authorized live monitoring during your work session. Your device's camera and microphone indicators remain visible while used.</p>
-      <button id="captureApprovalBtn" class="btn" type="button">Approve &amp; Continue</button>
-      <p id="captureApprovalError" class="small muted" role="alert"></p>
-    </div>
-  </section>
   <section id="screenRequestApproval" class="card" hidden style="position:fixed;z-index:100;bottom:1rem;left:1rem;right:1rem;max-width:460px;margin:auto">
     <p>The Admin has requested screen sharing. Your device will ask you to select what to share.</p>
     <button id="screenRequestBtn" class="btn" type="button">Share Screen</button>
@@ -60,9 +52,6 @@
   <script src="/socket.io/socket.io.js"></script>
   <script defer src="/team.js"></script>
   <script>
-    const captureApproval = document.getElementById('captureApproval');
-    const captureApprovalBtn = document.getElementById('captureApprovalBtn');
-    const captureApprovalError = document.getElementById('captureApprovalError');
     const workerWorkspace = document.getElementById('workerWorkspace');
     const screenRequestApproval = document.getElementById('screenRequestApproval');
     const screenRequestBtn = document.getElementById('screenRequestBtn');
@@ -514,33 +503,13 @@
         return false;
       }
     }
-    function saveMonitoringConsent() {
-      // Invoked only following the worker's explicit Approve & Continue click.
-      workerConsentIds().forEach(id => localStorage.setItem(monitoringKey(id), 'yes'));
-    }
+    // The workspace is independent of camera setup. A prior explicit monitoring
+    // consent is honored, but dashboard access never depends on camera capture.
     function enterWorkerWorkspace() {
-      captureApproval.hidden = true;
       workerWorkspace.hidden = false;
       connectSocket();
       openWorkerPage('tasks');
     }
-    captureApprovalBtn.addEventListener('click', async () => {
-      if (!workerAccountId) return;
-      captureApprovalBtn.disabled = true;
-      captureApprovalError.textContent = '';
-      try {
-        // Explicit click records authorization once, before capture initialization.
-        saveMonitoringConsent();
-      } catch (error) {
-        captureApprovalError.textContent = 'Could not remember authorization on this device. Check site storage settings.';
-        captureApprovalBtn.disabled = false;
-        return;
-      }
-      enterWorkerWorkspace();
-      // A device permission error is a separate issue; it must not block work.
-      ensureBaseCapture().catch(error => console.warn('Camera not yet available:', error));
-      captureApprovalBtn.disabled = false;
-    });
 
     logoutBtn.addEventListener('click', async () => {
       logoutBtn.disabled = true;
@@ -586,13 +555,11 @@
       }
       render();
       workerAccountId = me.user.id;
+      enterWorkerWorkspace();
+      // Start camera capture only if this worker has explicitly opted in before.
+      // Do not infer consent from Android/browser hardware permissions.
       if (hasSavedMonitoringConsent()) {
-        enterWorkerWorkspace();
-        // Prior consent is remembered. Browser/Android may still prompt for hardware access.
         ensureBaseCapture().catch(error => console.warn('Camera not yet available:', error));
-      } else {
-        workerWorkspace.hidden = true;
-        captureApproval.hidden = false;
       }
     })().catch(() => location.href = '/');
   </script>
