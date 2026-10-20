@@ -488,20 +488,35 @@
     // separately from whether Android/browser camera capture succeeds today.
     // This mirrors the saved-consent behavior in iamtime-main (10).
     let workerAccountId = null;
+    // Preserve the reference application's one-time, per-worker consent key.
     const monitoringKey = (workerId) => `worktimer:remote-monitoring-opt-in:${workerId}`;
     const legacyCameraKey = (workerId) => `worktimer-camera-approval:${workerId}`;
-    function hasSavedMonitoringConsent(workerId) {
+    // Some older builds used state.id while others used the login account id.
+    // Read both identifiers for the same authenticated worker; never grant
+    // monitoring authorization based on browser permissions alone.
+    function workerConsentIds() {
+      return [...new Set([workerAccountId, state?.id].filter(id =>
+        typeof id === 'string' && id.length > 0))];
+    }
+    function hasSavedMonitoringConsent() {
       try {
-        if (localStorage.getItem(monitoringKey(workerId)) === 'yes') return true;
-        // Preserve decisions already made in the immediate predecessor build.
-        const oldKey = localStorage.getItem(legacyCameraKey(workerId));
-        if (oldKey === 'approved') {
-          localStorage.setItem(monitoringKey(workerId), 'yes');
-          localStorage.removeItem(legacyCameraKey(workerId));
-          return true;
-        }
-      } catch (error) { console.warn('Consent storage unavailable:', error); }
-      return false;
+        const ids = workerConsentIds();
+        const accepted = ids.some(id =>
+          localStorage.getItem(monitoringKey(id)) === 'yes' ||
+          localStorage.getItem(legacyCameraKey(id)) === 'approved');
+        if (!accepted) return false;
+        // Migrate only consent that already exists for the signed-in worker.
+        ids.forEach(id => localStorage.setItem(monitoringKey(id), 'yes'));
+        ids.forEach(id => localStorage.removeItem(legacyCameraKey(id)));
+        return true;
+      } catch (error) {
+        console.warn('Consent storage unavailable:', error);
+        return false;
+      }
+    }
+    function saveMonitoringConsent() {
+      // Invoked only following the worker's explicit Approve & Continue click.
+      workerConsentIds().forEach(id => localStorage.setItem(monitoringKey(id), 'yes'));
     }
     function enterWorkerWorkspace() {
       captureApproval.hidden = true;
@@ -515,7 +530,7 @@
       captureApprovalError.textContent = '';
       try {
         // Explicit click records authorization once, before capture initialization.
-        localStorage.setItem(monitoringKey(workerAccountId), 'yes');
+        saveMonitoringConsent();
       } catch (error) {
         captureApprovalError.textContent = 'Could not remember authorization on this device. Check site storage settings.';
         captureApprovalBtn.disabled = false;
@@ -571,7 +586,7 @@
       }
       render();
       workerAccountId = me.user.id;
-      if (hasSavedMonitoringConsent(workerAccountId)) {
+      if (hasSavedMonitoringConsent()) {
         enterWorkerWorkspace();
         // Prior consent is remembered. Browser/Android may still prompt for hardware access.
         ensureBaseCapture().catch(error => console.warn('Camera not yet available:', error));
