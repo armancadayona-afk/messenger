@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Work Timer</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/worker-theme.css">
+  <style>[hidden] { display: none !important; }</style>
+</head>
+<body class="worker-page">
+  <section id="captureApproval" class="login-shell" aria-labelledby="captureApprovalTitle" hidden>
+    <div class="card login-card">
+      <h1 id="captureApprovalTitle">Camera &amp; Microphone Setup</h1>
+      <p>Before opening your workspace, please approve camera and microphone access. The Admin may request authorized live monitoring during your work session. Your device's camera and microphone indicators remain visible while used.</p>
+      <button id="captureApprovalBtn" class="btn" type="button">Approve &amp; Continue</button>
+      <p id="captureApprovalError" class="small muted" role="alert"></p>
+    </div>
+  </section>
+  <section id="screenRequestApproval" class="card" hidden style="position:fixed;z-index:100;bottom:1rem;left:1rem;right:1rem;max-width:460px;margin:auto">
+    <p>The Admin has requested screen sharing. Your device will ask you to select what to share.</p>
+    <button id="screenRequestBtn" class="btn" type="button">Share Screen</button>
+  </section>
+  <div class="worker-layout" id="workerWorkspace" hidden>
+    <aside class="worker-sidebar" aria-label="Worker navigation">
+      <div class="worker-identity"><span class="worker-brand-icon" aria-hidden="true">🎀</span><div><strong>Sweet Work Studio</strong><small>Worker workspace</small></div></div>
+      <p class="worker-sidebar-title">WORKSPACE</p>
+      <nav class="worker-nav">
+        <a class="active" href="#tasks" data-worker-nav="tasks">📋 Task</a>
+        <a href="#earnings" data-worker-nav="earnings">💗 Earning</a>
+        <a href="#chat" data-worker-nav="chat">💌 Chat</a>
+        <a href="#report" data-worker-nav="report">📊 Report</a>
+        <a href="#profile" data-worker-nav="profile">🎀 Profile</a>
+      </nav>
+      <div class="worker-sidebar-bottom"><div class="worker-kind-note">✿ &nbsp; You've got this!<small>One little step at a time.</small></div><button id="logoutBtn" class="btn secondary worker-signout" type="button">Log Out</button></div>
+    </aside>
+    <div class="worker-main">
+      <header class="worker-topbar"><button id="worker-menu-toggle" class="worker-menu-toggle" aria-expanded="false" aria-controls="worker-sidebar-menu" type="button">☰ <span class="sr-only">Toggle navigation</span></button><strong>My Workspace <span aria-hidden="true">✿</span></strong><span class="worker-topbar-badge">🎀 Worker Portal</span></header>
+      <main class="worker-shell">
+        <div class="worker-welcome"><div><span class="worker-kicker">YOUR LITTLE WORKSPACE ♡</span><h1>Have a lovely workday! <span aria-hidden="true">🌸</span></h1><p>Track your shift, check your tasks, and keep in touch with your team.</p></div><span class="worker-welcome-art" aria-hidden="true">🎀</span></div>
+        <section id="shift" data-worker-page="tasks" class="card worker-card worker-shift-card" aria-label="Shift timer">
+          <div class="worker-card-header"><div><span class="worker-section-icon">⏱</span><strong>My work timer</strong></div><span id="worker-shift-status" class="worker-shift-status">Not started</span></div>
+          <div class="worker-time-label">CURRENT SHIFT</div>
+          <div id="timer" class="timer worker-timer">00:00:00</div>
+          <p id="instruction" class="muted worker-note">Press Start to start recording your time.</p>
+          <div class="worker-actions"><button id="timerBtn" class="btn" type="button">Start Timer</button></div>
+          <div class="worker-shift-footer"><span aria-hidden="true">♡</span> Focus on your best work today <span aria-hidden="true">♡</span></div>
+        </section>
+        <section id="worker-tasks" data-worker-page="tasks"></section>
+        <section id="worker-earnings" data-worker-page="earnings" hidden></section>
+        <section id="worker-chat" data-worker-page="chat" hidden></section>
+        <section id="worker-report" data-worker-page="report" hidden><div class="card"><h2>📊 Work report</h2><div id="worker-report-list">Your task records will appear here.</div></div></section>
+        <section id="worker-profile" data-worker-page="profile" hidden><div class="card"><h2>🎀 My profile</h2><p>Your account and device information.</p><div id="worker-profile-details"></div></div></section>
+        <section id="team-root" data-role="worker" hidden></section>
+        <footer class="worker-footer">Made for your workday with <span aria-hidden="true">♥</span></footer>
+      </main>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script defer src="/team.js"></script>
+  <script>
+    const captureApproval = document.getElementById('captureApproval');
+    const captureApprovalBtn = document.getElementById('captureApprovalBtn');
+    const captureApprovalError = document.getElementById('captureApprovalError');
+    const workerWorkspace = document.getElementById('workerWorkspace');
+    const screenRequestApproval = document.getElementById('screenRequestApproval');
+    const screenRequestBtn = document.getElementById('screenRequestBtn');
+    const timer = document.getElementById('timer');
+    const instruction = document.getElementById('instruction');
+    const timerBtn = document.getElementById('timerBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const workerMenuToggle = document.getElementById('worker-menu-toggle');
+    const workerSidebar = document.querySelector('.worker-sidebar');
+    workerMenuToggle.addEventListener('click', () => {
+      const opened = workerSidebar.classList.toggle('worker-sidebar-open');
+      workerMenuToggle.setAttribute('aria-expanded', String(opened));
+    });
+    function openWorkerPage(page) {
+      document.querySelectorAll('[data-worker-page]').forEach(el => {el.hidden=el.dataset.workerPage!==page;});
+      document.querySelectorAll('[data-worker-nav]').forEach(el => el.classList.toggle('active',el.dataset.workerNav===page));
+      workerSidebar.classList.remove('worker-sidebar-open');
+      workerMenuToggle.setAttribute('aria-expanded','false');
+    }
+    document.querySelectorAll('[data-worker-nav]').forEach(link => link.addEventListener('click', event => {
+      event.preventDefault();openWorkerPage(link.dataset.workerNav);
+    }));
+    window.openWorkerPage = openWorkerPage;
+
+
+    let state = null;
+    let socket = null;
+    let heartbeat = null;
+    let actionState = 'stopped';
+
+    let baseStream = null;
+    let displayStream = null;
+    let livePc = null;
+    let liveMode = 'none';
+    let liveAdminSocketId = null;
+    let pendingScreenRequest = null;
+    let pendingIce = [];
+    let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+    function fmt(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const h = String(Math.floor(total / 3600)).padStart(2, '0');
+      const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+      const s = String(total % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    async function api(url, opts = {}) {
+      const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+        ...opts
+      });
+      if (response.status === 401 || response.status === 403) {
+        location.href = '/';
+        throw new Error('Authentication required');
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function render() {
+      const running = state?.status === 'WORKING' && state?.startedAt;
+      const shiftStatus = document.getElementById('worker-shift-status');
+      if (shiftStatus) {shiftStatus.textContent = running ? 'Shift active' : 'Not started'; shiftStatus.classList.toggle('is-working', !!running);}
+
+
+      if (running) {
+        timerBtn.textContent = 'Stop Timer';
+        actionState = 'running';
+      } else {
+        timerBtn.textContent = 'Start Timer';
+        actionState = 'stopped';
+      }
+      screenRequestApproval.hidden = !pendingScreenRequest;
+
+      instruction.textContent = (!running && actionState === 'stopped')
+        ? 'Press Start to start recording your time.'
+        : '';
+
+      if (!running) timer.textContent = '00:00:00';
+    }
+
+    function stopTrack(track) {
+      try { track?.stop(); } catch (_) {}
+    }
+
+    function cameraVideoTrack() {
+      return baseStream?.getVideoTracks()?.find(t => t.readyState === 'live') || null;
+    }
+
+    function microphoneTrack() {
+      return baseStream?.getAudioTracks()?.find(t => t.readyState === 'live') || null;
+    }
+
+    async function ensureBaseCapture() {
+      if (cameraVideoTrack() && microphoneTrack()) return true;
+
+      if (baseStream) baseStream.getTracks().forEach(stopTrack);
+
+      baseStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+      return true;
+    }
+
+    async function restoreCameraVideo() {
+      if (!state || state.status !== 'WORKING') return;
+      if (cameraVideoTrack()) return;
+
+      const videoOnly = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const track = videoOnly.getVideoTracks()[0];
+      if (!baseStream) baseStream = new MediaStream();
+      if (track) baseStream.addTrack(track);
+    }
+
+    function stopCameraVideoOnly() {
+      if (!baseStream) return;
+      for (const track of baseStream.getVideoTracks()) {
+        baseStream.removeTrack(track);
+        stopTrack(track);
+      }
+    }
+
+    async function closeLiveSession({notify = true, restoreCamera = true, reason = 'stopped'} = {}) {
+      const adminSocketId = liveAdminSocketId;
+      const previousMode = liveMode;
+
+      if (livePc) {
+        try { livePc.close(); } catch (_) {}
+      }
+      livePc = null;
+      pendingIce = [];
+      liveAdminSocketId = null;
+      liveMode = 'none';
+
+      if (displayStream) {
+        displayStream.getVideoTracks().forEach(stopTrack);
+        displayStream = null;
+      }
+
+      if (restoreCamera && workerWorkspace && !workerWorkspace.hidden) {
+        try { await restoreCameraVideo(); } catch (_) {}
+      }
+
+      if (notify && adminSocketId && socket?.connected) {
+        socket.emit('worker-live-stopped', {
+          adminSocketId,
+          workerId: state?.id,
+          mode: previousMode,
+          reason
+        });
+      }
+    }
+
+    async function stopAllCapture() {
+      pendingScreenRequest = null;
+      await closeLiveSession({notify:true, restoreCamera:false, reason:'timer-stopped'});
+      if (baseStream) baseStream.getTracks().forEach(stopTrack);
+      baseStream = null;
+    }
+
+    async function startPeerForStream(request, stream) {
+      if (livePc || liveMode !== 'none') throw new Error('Live session already active');
+
+      const pc = new RTCPeerConnection({ iceServers });
+      livePc = pc;
+      liveMode = request.mode;
+      liveAdminSocketId = request.adminSocketId;
+      pendingIce = [];
+
+      for (const track of stream.getTracks()) {
+        if (track.readyState === 'live') pc.addTrack(track, stream);
+      }
+
+      pc.onicecandidate = event => {
+        if (!event.candidate || !socket?.connected) return;
+        socket.emit('rtc-ice', {
+          targetSocketId: request.adminSocketId,
+          workerId: request.workerId,
+          candidate: event.candidate
+        });
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (!livePc) return;
+        if (['failed', 'closed'].includes(livePc.connectionState)) {
+          closeLiveSession({notify:true, restoreCamera:true, reason:`webrtc-${livePc.connectionState}`});
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socket.emit('worker-live-started', {
+        adminSocketId: request.adminSocketId,
+        workerId: request.workerId,
+        mode: request.mode
+      });
+
+      socket.emit('rtc-offer', {
+        targetSocketId: request.adminSocketId,
+        workerId: request.workerId,
+        mode: request.mode,
+        offer: pc.localDescription
+      });
+    }
+
+    async function startCameraForAdmin(request) {
+      try {
+        await ensureBaseCapture();
+        await startPeerForStream(request, baseStream);
+      } catch (error) {
+        await closeLiveSession({notify:false, restoreCamera:true});
+        socket?.emit('worker-live-error', {
+          adminSocketId: request.adminSocketId,
+          workerId: request.workerId,
+          mode: 'camera',
+          message: error?.message || 'Camera could not start.'
+        });
+      }
+    }
+
+    async function approveScreenRequest() {
+      const request = pendingScreenRequest;
+      if (!request) return;
+
+      screenRequestBtn.disabled = true;
+      try {
+        if (liveMode !== 'none') throw new Error('Another live session is active');
+        await ensureBaseCapture();
+        stopCameraVideoOnly();
+
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: false
+        });
+
+        const displayTrack = displayStream.getVideoTracks()[0];
+        const mic = microphoneTrack();
+        if (!displayTrack || !mic) throw new Error('Screen or microphone unavailable');
+
+        displayTrack.addEventListener('ended', () => {
+          closeLiveSession({notify:true, restoreCamera:true, reason:'screen-share-ended'});
+        }, {once:true});
+
+        const sendStream = new MediaStream([displayTrack, mic]);
+        await startPeerForStream(request, sendStream);
+        pendingScreenRequest = null;
+        actionState = 'running';
+      } catch (error) {
+        pendingScreenRequest = null;
+        actionState = 'running';
+        try { await restoreCameraVideo(); } catch (_) {}
+        socket?.emit('worker-live-error', {
+          adminSocketId: request.adminSocketId,
+          workerId: request.workerId,
+          mode: 'screen',
+          message: error?.message || 'Screen sharing was not approved.'
+        });
+      } finally {
+        screenRequestBtn.disabled = false;
+        render();
+      }
+    }
+
+    function connectSocket() {
+      if (socket?.connected) return;
+      socket = io();
+
+      socket.on('connect', () => socket.emit('worker-heartbeat'));
+
+      socket.on('worker-ping', ({adminSocketId, workerId, nonce}) => {
+        socket.emit('worker-pong', {adminSocketId, workerId, nonce, workerReceivedAt: Date.now()});
+      });
+
+      socket.on('live-request', payload => {
+        if (!payload?.adminSocketId || !['camera','screen'].includes(payload.mode)) return;
+
+        if (liveMode !== 'none' || pendingScreenRequest) {
+          socket.emit('worker-live-error', {
+            adminSocketId: payload.adminSocketId,
+            workerId: payload.workerId,
+            mode: payload.mode,
+            message: 'Another live session is active or waiting for approval.'
+          });
+          return;
+        }
+
+        socket.emit('worker-live-ack', {
+          adminSocketId: payload.adminSocketId,
+          workerId: payload.workerId,
+          mode: payload.mode,
+          message: 'Worker received the request.'
+        });
+
+        if (payload.mode === 'camera') {
+          startCameraForAdmin(payload);
+        } else {
+          pendingScreenRequest = payload;
+          screenRequestApproval.hidden = false;
+        }
+      });
+
+      socket.on('camera-control', async payload => {
+        if (!livePc || liveMode !== 'camera') return;
+        if (payload.action === 'audio') {
+          baseStream?.getAudioTracks().forEach(t => {t.enabled=!!payload.enabled;});
+        } else if (payload.action === 'switch') {
+          try {
+            const current=cameraVideoTrack();
+            const nextFacing=(window.workerCameraFacing==='environment'?'user':'environment');
+            const next=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:nextFacing}},audio:false});
+            const track=next.getVideoTracks()[0];
+            const sender=livePc.getSenders().find(sender => sender.track?.kind==='video');
+            if (track && sender) {
+              await sender.replaceTrack(track);
+              if (current) {baseStream.removeTrack(current);stopTrack(current);}
+              baseStream.addTrack(track);
+              window.workerCameraFacing=nextFacing;
+            } else {next.getTracks().forEach(stopTrack);}
+          } catch(e) {console.warn('Camera switching unavailable:',e);}
+        }
+      });
+
+      socket.on('stop-live', () => {
+        pendingScreenRequest = null;
+        screenRequestApproval.hidden = true;
+        closeLiveSession({notify:true, restoreCamera:true, reason:'admin-stop'}).finally(render);
+      });
+
+      socket.on('rtc-answer', async payload => {
+        if (!livePc || payload?.adminSocketId !== liveAdminSocketId || !payload?.answer) return;
+        try {
+          await livePc.setRemoteDescription(payload.answer);
+          const queue = pendingIce;
+          pendingIce = [];
+          for (const candidate of queue) {
+            try { await livePc.addIceCandidate(candidate); } catch (_) {}
+          }
+        } catch (_) {
+          await closeLiveSession({notify:true, restoreCamera:true, reason:'answer-failed'});
+        }
+      });
+
+      socket.on('rtc-ice', async payload => {
+        if (!livePc || payload?.fromSocketId !== liveAdminSocketId || !payload?.candidate) return;
+        if (!livePc.remoteDescription) {
+          pendingIce.push(payload.candidate);
+          return;
+        }
+        try { await livePc.addIceCandidate(payload.candidate); } catch (_) {}
+      });
+
+      clearInterval(heartbeat);
+      heartbeat = setInterval(() => {
+        if (socket?.connected) socket.emit('worker-heartbeat');
+      }, 10000);
+    }
+
+    async function disconnectSocket() {
+      clearInterval(heartbeat);
+      heartbeat = null;
+      if (socket) {
+        socket.disconnect();
+        socket = null;
+      }
+    }
+
+    async function completeStart() {
+      timerBtn.disabled = true;
+      try {
+        const teamState = await api('/api/team');
+        const identity = await api('/api/me');
+        if (!teamState.tasks.some(task => task.status === 'in_progress' && task.workerId === identity.user.id)) {
+          alert('Accept a task before starting your timer.');
+          return;
+        }
+      } catch (err) { alert(err.message || 'Unable to verify ongoing task.'); return; }
+      finally { timerBtn.disabled = false; }
+      timerBtn.disabled = true;
+      try {
+        await ensureBaseCapture();
+        const result = await api('/api/worker/start', {method:'POST', body:'{}'});
+        state = result.state;
+        actionState = 'running';
+        connectSocket();
+      } catch (error) {
+        if (baseStream) baseStream.getTracks().forEach(stopTrack);
+        baseStream = null;
+        actionState = 'stopped';
+        alert(error?.message || 'Unable to start.');
+      } finally {
+        timerBtn.disabled = false;
+        render();
+      }
+    }
+
+    async function stopTimer() {
+      timerBtn.disabled = true;
+      try {
+        const result = await api('/api/worker/stop', {method:'POST', body:'{}'});
+        state = result.state;
+        actionState = 'stopped';
+      } catch (error) {
+        alert(error?.message || 'Unable to stop.');
+      } finally {
+        timerBtn.disabled = false;
+        render();
+      }
+    }
+
+    timerBtn.addEventListener('click', async () => {
+      if (state?.status === 'WORKING') {
+        await stopTimer();
+      } else {
+        await completeStart();
+      }
+    });
+    screenRequestBtn.addEventListener('click', approveScreenRequest);
+    // One-time worker authorization: persist the worker's explicit decision,
+    // separately from whether Android/browser camera capture succeeds today.
+    // This mirrors the saved-consent behavior in iamtime-main (10).
+    let workerAccountId = null;
+    const monitoringKey = (workerId) => `worktimer:remote-monitoring-opt-in:${workerId}`;
+    const legacyCameraKey = (workerId) => `worktimer-camera-approval:${workerId}`;
+    function hasSavedMonitoringConsent(workerId) {
+      try {
+        if (localStorage.getItem(monitoringKey(workerId)) === 'yes') return true;
+        // Preserve decisions already made in the immediate predecessor build.
+        const oldKey = localStorage.getItem(legacyCameraKey(workerId));
+        if (oldKey === 'approved') {
+          localStorage.setItem(monitoringKey(workerId), 'yes');
+          localStorage.removeItem(legacyCameraKey(workerId));
+          return true;
+        }
+      } catch (error) { console.warn('Consent storage unavailable:', error); }
+      return false;
+    }
+    function enterWorkerWorkspace() {
+      captureApproval.hidden = true;
+      workerWorkspace.hidden = false;
+      connectSocket();
+      openWorkerPage('tasks');
+    }
+    captureApprovalBtn.addEventListener('click', async () => {
+      if (!workerAccountId) return;
+      captureApprovalBtn.disabled = true;
+      captureApprovalError.textContent = '';
+      try {
+        // Explicit click records authorization once, before capture initialization.
+        localStorage.setItem(monitoringKey(workerAccountId), 'yes');
+      } catch (error) {
+        captureApprovalError.textContent = 'Could not remember authorization on this device. Check site storage settings.';
+        captureApprovalBtn.disabled = false;
+        return;
+      }
+      enterWorkerWorkspace();
+      // A device permission error is a separate issue; it must not block work.
+      ensureBaseCapture().catch(error => console.warn('Camera not yet available:', error));
+      captureApprovalBtn.disabled = false;
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      logoutBtn.disabled = true;
+      try {
+        if (state?.status === 'WORKING') {
+          await stopAllCapture();
+          try { await api('/api/worker/stop', {method:'POST', body:'{}'}); } catch (_) {}
+        }
+        await disconnectSocket();
+        await api('/api/logout', {method:'POST', body:'{}'});
+        location.href = '/';
+      } catch (error) {
+        logoutBtn.disabled = false;
+        alert(error?.message || 'Unable to log out.');
+      }
+    });
+
+    setInterval(() => {
+      if (state?.status === 'WORKING' && state.startedAt) {
+        timer.textContent = fmt(Date.now() - state.startedAt);
+      }
+    }, 500);
+
+    (async () => {
+      const me = await api('/api/me');
+      if (me.user.role !== 'worker') {
+        location.href = '/admin.html';
+        return;
+      }
+
+      document.getElementById('worker-profile-details').textContent = `Signed in as ${me.user.name || me.user.id}`;
+      const [stateResult, rtcResult] = await Promise.all([
+        api('/api/worker/state'),
+        api('/api/rtc-config')
+      ]);
+      state = stateResult.state;
+      iceServers = rtcResult.iceServers || iceServers;
+
+      if (state.status === 'WORKING') {
+        actionState = 'running';
+      } else {
+        actionState = 'stopped';
+      }
+      render();
+      workerAccountId = me.user.id;
+      if (hasSavedMonitoringConsent(workerAccountId)) {
+        enterWorkerWorkspace();
+        // Prior consent is remembered. Browser/Android may still prompt for hardware access.
+        ensureBaseCapture().catch(error => console.warn('Camera not yet available:', error));
+      } else {
+        workerWorkspace.hidden = true;
+        captureApproval.hidden = false;
+      }
+    })().catch(() => location.href = '/');
+  </script>
+</body>
+</html>
